@@ -10,22 +10,21 @@ widget_registry = WidgetRegistry()
 
 # will mutate the tasks list passed in
 def reload_tasks(api:Habitica, tasks:list):
-    new_tasks = load_tasks(api)
+    new_tasks = api.get_tasks()
     tasks.clear()
     for new_task in new_tasks:
         tasks.append(new_task)
     return tasks
 
-# Finds selected task ids from the global tasks for checked items.
-def find_selected_task_id(widget_registry:dict) -> str:
-    found = find_selected_task(widget_registry)
+def find_selected_task_id(widget_registry:dict, tasks:list) -> str:
+    found = find_selected_task(widget_registry, tasks)
     if found is not None:
         return found.id
     else:
         return None
 
 # Finds selected task ids from the global tasks for checked items.
-def find_selected_task(widget_registry:dict):
+def find_selected_task(widget_registry:dict, tasks:list):
     item_group_tasks = widget_registry.retrieve(WidgetRegistryName.ITEM_GROUP_TASKS)
     if item_group_tasks is not None:
         # get selected
@@ -36,18 +35,18 @@ def find_selected_task(widget_registry:dict):
     return None
 
 def add_button_cb(api:Habitica, tasks:list, widget_registry:dict, text:str, textarea:str, priority:int):
-    task_id = find_selected_task_id(widget_registry)
+    task_id = find_selected_task_id(widget_registry, tasks)
     api.save(task_id, text, textarea, priority)
     clear_button_cb(api, widget_registry)
 
 # Mark selected tasks as done
 def save_button_cb(api:Habitipy, widget_registry:dict, tasks:list):
-    task_id = find_selected_task_id(widget_registry)
+    task_id = find_selected_task_id(widget_registry, tasks)
     api.mark_completed(task_id)
     clear_button_cb(api, widget_registry)
 
-def edit_button_cb(api:Habitipy, widget_registry: dict):
-    task = find_selected_task(widget_registry)
+def edit_button_cb(api:Habitipy, widget_registry: dict, tasks:list):
+    task = find_selected_task(widget_registry, tasks)
     if task is None:
         print('no selected task found for edit') 
         return
@@ -62,17 +61,17 @@ def edit_button_cb(api:Habitipy, widget_registry: dict):
 
 # Delete selected tasks
 def delete_button_cb(api:Habitica, widget_registry:dict, tasks:list):
-    task_id = find_selected_task_id(widget_registry)
+    task_id = find_selected_task_id(widget_registry, tasks)
     if task_id is None:
         print(f'No task id found {task_id}')
         return
     api.destroy(task_id)
     clear_button_cb(api, widget_registry)
 
-def checkbox_selected_cb(api:Habitica, widget_registry:dict, selected:bool):
+def checkbox_selected_cb(api:Habitica, widget_registry:dict, tasks:list, selected:bool):
     if selected is False:
         return
-    edit_button_cb(api, widget_registry)
+    edit_button_cb(api, widget_registry, tasks)
 
 def clear_button_cb(api:Habitica, widget_registry:dict):
     task_input = widget_registry.retrieve(WidgetRegistryName.TASK_INPUT)
@@ -82,9 +81,6 @@ def clear_button_cb(api:Habitica, widget_registry:dict):
     reload_tasks(api, tasks)
     create_item_group(api, tasks, widget_registry)
     task_input.setFocus()
-
-def load_tasks(api:Habitica) -> list:
-    return api.get_tasks()
 
 def create_action_group(api:Habitica, widget_registry:dict, tasks:list):
     group = QGroupBox('Actions')
@@ -142,18 +138,12 @@ def create_item_group(api:Habitica, tasks:list, widget_registry:dict):
     if tasks is not None:
         for task in tasks:
             checkbox = QRadioButton(task.text)
-            checkbox.toggled.connect(lambda selected: checkbox_selected_cb(api, widget_registry, selected))
+            checkbox.toggled.connect(lambda selected: checkbox_selected_cb(api, widget_registry, tasks, selected))
             item_group_tasks = widget_registry.retrieve(WidgetRegistryName.ITEM_GROUP_TASKS)
             item_group_tasks.append(checkbox)
             item_group_layout.addWidget(checkbox)
 
     return (item_group, item_group_layout)
-
-def add_spacer(layout):
-    # w, h
-    vertical_spacer = QSpacerItem(20, 40, QSizePolicy.Minimum, QSizePolicy.Expanding) 
-    layout.addSpacerItem(vertical_spacer)
-    return layout
 
 
 # habitipy
@@ -210,10 +200,3 @@ window.setLayout(layout)
 # window.resize(600, 600)
 window.show()
 app.exec_()
-
-# Signals:
-# message.returnPressed.connect(send_message)
-# timer = QTimer()
-# timer.timeout.connect(display_new_messages)
-# timer.start(1000)
-# return app
