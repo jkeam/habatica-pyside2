@@ -1,0 +1,9 @@
+certifi==2020.4.5.1
+chardet==3.0.4
+habitipy==0.3.0
+idna==2.9
+plumbum==1.6.9
+PySide2==5.14.2
+requests==2.23.0
+shiboken2==5.14.2
+urllib3==1.25.8
