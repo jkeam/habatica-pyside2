@@ -56,9 +56,8 @@ def add_button_cb(api:Habitipy, tasks:list, widget_registry:dict, text:str, text
 # Mark selected tasks as done
 def save_button_cb(api:Habitipy, widget_registry:dict, tasks:list):
     task_id = find_selected_task_id(widget_registry)
-    api.tasks[task_id].score('up').post()
-    reload_tasks(api, tasks)
-    create_item_group(api, tasks, widget_registry)
+    api.tasks[task_id].score['up'].post()
+    clear_button_cb(api, widget_registry)
 
 def edit_button_cb(api:Habitipy, widget_registry: dict):
     # FIXME: extract this
