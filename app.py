@@ -1,20 +1,10 @@
 from PySide2.QtWidgets import *
 from habitipy import Habitipy, load_conf, DEFAULT_CONF
-from enum import Enum
+from lib.task import TaskType, Task, Priority
 
 # global vars
 tasks = []
 widget_registry = {}
-
-
-class TodoType(Enum):
-    HABIT = 'habit'
-    DAILY = 'daily'
-    TODO = 'todo'
-    REWARD = 'reward'
-
-    def __str__(self):
-        return self.value
 
 # will mutate the tasks list passed in
 def reload_tasks(api:Habitipy, tasks:list):
@@ -28,7 +18,7 @@ def reload_tasks(api:Habitipy, tasks:list):
 def find_selected_task_id(widget_registry:dict) -> str:
     found = find_selected_task(widget_registry)
     if found is not None:
-        return found.get('id', None)
+        return found.id
     else:
         return None
 
@@ -45,12 +35,10 @@ def find_selected_task(widget_registry:dict):
 
 def add_button_cb(api:Habitipy, tasks:list, widget_registry:dict, text:str, textarea:str, priority:int):
     task_id = find_selected_task_id(widget_registry)
-    priority_values = ['0.1', '1', '1.5', '2']
-    api_priority = priority_values[priority]
     if task_id is None:
-        api.tasks.user.post(text=text, type=str(TodoType.TODO), notes=textarea, priority=api_priority)
+        api.tasks.user.post(text=text, type=str(TaskType.TODO), notes=textarea, priority=Priority.priority_index_to_value(priority))
     else:
-        api.tasks[task_id].put(text=text, type=str(TodoType.TODO), notes=textarea, priority=api_priority)
+        api.tasks[task_id].put(text=text, type=str(TaskType.TODO), notes=textarea, priority=Priority.priority_index_to_value(priority))
     clear_button_cb(api, widget_registry)
 
 # Mark selected tasks as done
@@ -60,8 +48,6 @@ def save_button_cb(api:Habitipy, widget_registry:dict, tasks:list):
     clear_button_cb(api, widget_registry)
 
 def edit_button_cb(api:Habitipy, widget_registry: dict):
-    # FIXME: extract this
-    priority_values = ['0.1', '1', '1.5', '2']
     task = find_selected_task(widget_registry)
     if task is None:
         print('no selected task found for edit') 
@@ -71,10 +57,9 @@ def edit_button_cb(api:Habitipy, widget_registry: dict):
     add_input = widget_registry['task_input']
     add_input_textarea = widget_registry['task_textarea']
     priority_select = widget_registry['task_priority']
-    add_input.setText(task.get('text', ''))
-    add_input_textarea.setText(task.get('notes', ''))
-    item_priority = priority_values.index(str(task.get('priority', 0)))
-    priority_select.setCurrentIndex(item_priority)
+    add_input.setText(task.text)
+    add_input_textarea.setText(task.notes)
+    priority_select.setCurrentIndex(Priority.priority_value_to_index(task.priority))
 
 # Delete selected tasks
 def delete_button_cb(api:Habitipy, widget_registry:dict, tasks:list):
@@ -107,7 +92,15 @@ def load_tasks(api) -> list:
     # 'updatedAt': '2020-04-11T14:55:48.962Z', '_id': '4BF9CA59-FEDB-45B4-BE45-BCE58384A423', 'date': None,
     # 'text': 'Clean House', 'userId': 'e192efef-1de2-4ae6-9804-9bd4ab9b30b6',
     # 'id': '4BF9CA59-FEDB-45B4-BE45-BCE58384A423'}
-    return api.tasks.user.get(type='todos')
+    tasks = api.tasks.user.get(type='todos')
+    def create_task(api_task):
+        task = Task()
+        task.id = api_task.get('id', None)
+        task.text = api_task.get('text', '')
+        task.notes = api_task.get('notes', '')
+        task.priority = str(api_task.get('priority', '0.1'))
+        return task
+    return list(map(create_task, tasks))
 
 def create_action_group(api:Habitipy, widget_registry:dict, tasks:list):
     group = QGroupBox('Actions')
@@ -164,7 +157,7 @@ def create_item_group(api:Habitipy, tasks:list, widget_registry:dict):
 
     if tasks is not None:
         for task in tasks:
-            checkbox = QRadioButton(task['text'])
+            checkbox = QRadioButton(task.text)
             checkbox.toggled.connect(lambda selected: checkbox_selected_cb(api, widget_registry, selected))
             widget_registry['item_group_tasks'].append(checkbox)
             item_group_layout.addWidget(checkbox)
