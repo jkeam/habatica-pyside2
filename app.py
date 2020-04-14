@@ -1,13 +1,15 @@
 from PySide2.QtWidgets import *
 from habitipy import Habitipy, load_conf, DEFAULT_CONF
 from lib.task import TaskType, Task, Priority
+from lib.widget_registry import WidgetRegistry, WidgetRegistryName
+from lib.habitica import Habitica
 
 # global vars
 tasks = []
-widget_registry = {}
+widget_registry = WidgetRegistry()
 
 # will mutate the tasks list passed in
-def reload_tasks(api:Habitipy, tasks:list):
+def reload_tasks(api:Habitica, tasks:list):
     new_tasks = load_tasks(api)
     tasks.clear()
     for new_task in new_tasks:
@@ -24,7 +26,7 @@ def find_selected_task_id(widget_registry:dict) -> str:
 
 # Finds selected task ids from the global tasks for checked items.
 def find_selected_task(widget_registry:dict):
-    item_group_tasks = widget_registry.get('item_group_tasks', None)
+    item_group_tasks = widget_registry.retrieve(WidgetRegistryName.ITEM_GROUP_TASKS)
     if item_group_tasks is not None:
         # get selected
         for index, task in enumerate(item_group_tasks):
@@ -33,18 +35,15 @@ def find_selected_task(widget_registry:dict):
                 return task
     return None
 
-def add_button_cb(api:Habitipy, tasks:list, widget_registry:dict, text:str, textarea:str, priority:int):
+def add_button_cb(api:Habitica, tasks:list, widget_registry:dict, text:str, textarea:str, priority:int):
     task_id = find_selected_task_id(widget_registry)
-    if task_id is None:
-        api.tasks.user.post(text=text, type=str(TaskType.TODO), notes=textarea, priority=Priority.priority_index_to_value(priority))
-    else:
-        api.tasks[task_id].put(text=text, type=str(TaskType.TODO), notes=textarea, priority=Priority.priority_index_to_value(priority))
+    api.save(task_id, text, textarea, priority)
     clear_button_cb(api, widget_registry)
 
 # Mark selected tasks as done
 def save_button_cb(api:Habitipy, widget_registry:dict, tasks:list):
     task_id = find_selected_task_id(widget_registry)
-    api.tasks[task_id].score['up'].post()
+    api.mark_completed(task_id)
     clear_button_cb(api, widget_registry)
 
 def edit_button_cb(api:Habitipy, widget_registry: dict):
@@ -54,55 +53,40 @@ def edit_button_cb(api:Habitipy, widget_registry: dict):
         return
 
     # set values in inputs
-    add_input = widget_registry['task_input']
-    add_input_textarea = widget_registry['task_textarea']
-    priority_select = widget_registry['task_priority']
-    add_input.setText(task.text)
-    add_input_textarea.setText(task.notes)
+    task_input = widget_registry.retrieve(WidgetRegistryName.TASK_INPUT)
+    task_input_textarea = widget_registry.retrieve(WidgetRegistryName.TASK_TEXTAREA)
+    priority_select = widget_registry.retrieve(WidgetRegistryName.TASK_PRIORITY)
+    task_input.setText(task.text)
+    task_input_textarea.setText(task.notes)
     priority_select.setCurrentIndex(Priority.priority_value_to_index(task.priority))
 
 # Delete selected tasks
-def delete_button_cb(api:Habitipy, widget_registry:dict, tasks:list):
+def delete_button_cb(api:Habitica, widget_registry:dict, tasks:list):
     task_id = find_selected_task_id(widget_registry)
     if task_id is None:
         print(f'No task id found {task_id}')
         return
-    api.tasks[task_id].delete()
+    api.destroy(task_id)
     clear_button_cb(api, widget_registry)
 
-def checkbox_selected_cb(api, widget_registry:dict, selected:bool):
+def checkbox_selected_cb(api:Habitica, widget_registry:dict, selected:bool):
     if selected is False:
         return
     edit_button_cb(api, widget_registry)
 
-def clear_button_cb(api:Habitipy, widget_registry:dict):
-    task_input = widget_registry['task_input']
+def clear_button_cb(api:Habitica, widget_registry:dict):
+    task_input = widget_registry.retrieve(WidgetRegistryName.TASK_INPUT)
     task_input.clear()
-    widget_registry['task_textarea'].clear()
-    widget_registry['task_priority'].setCurrentIndex(0)
+    widget_registry.retrieve(WidgetRegistryName.TASK_TEXTAREA).clear()
+    widget_registry.retrieve(WidgetRegistryName.TASK_PRIORITY).setCurrentIndex(0)
     reload_tasks(api, tasks)
     create_item_group(api, tasks, widget_registry)
     task_input.setFocus()
 
-def load_tasks(api) -> list:
-    # {'challenge': {}, 'group': {'approval': {'required': False, 'approved': False, 'requested': False},
-    # 'assignedUsers': [], 'sharedCompletion': 'singleCompletion'}, 'completed': False, 'collapseChecklist': False,
-    # 'type': 'todo', 'notes': None, 'tags': [], 'value': -44.17407706858991, 'priority': 2, 'attribute': 'str',
-    # 'byHabitica': False, 'checklist': [], 'reminders': [], 'createdAt': '2020-03-15T05:51:17.040Z',
-    # 'updatedAt': '2020-04-11T14:55:48.962Z', '_id': '4BF9CA59-FEDB-45B4-BE45-BCE58384A423', 'date': None,
-    # 'text': 'Clean House', 'userId': 'e192efef-1de2-4ae6-9804-9bd4ab9b30b6',
-    # 'id': '4BF9CA59-FEDB-45B4-BE45-BCE58384A423'}
-    tasks = api.tasks.user.get(type='todos')
-    def create_task(api_task):
-        task = Task()
-        task.id = api_task.get('id', None)
-        task.text = api_task.get('text', '')
-        task.notes = api_task.get('notes', '')
-        task.priority = str(api_task.get('priority', '0.1'))
-        return task
-    return list(map(create_task, tasks))
+def load_tasks(api:Habitica) -> list:
+    return api.get_tasks()
 
-def create_action_group(api:Habitipy, widget_registry:dict, tasks:list):
+def create_action_group(api:Habitica, widget_registry:dict, tasks:list):
     group = QGroupBox('Actions')
     layout = QHBoxLayout()
 
@@ -119,7 +103,7 @@ def create_action_group(api:Habitipy, widget_registry:dict, tasks:list):
     group.setLayout(layout)
     return (group, layout)
 
-def create_input_action_group(api:Habitipy, widget_registry:dict, tasks:list, add_input, add_input_textarea, priority_select):
+def create_input_action_group(api:Habitica, widget_registry:dict, tasks:list, add_input, add_input_textarea, priority_select):
     group = QGroupBox('Input Actions')
     layout = QHBoxLayout()
 
@@ -136,30 +120,31 @@ def create_input_action_group(api:Habitipy, widget_registry:dict, tasks:list, ad
     group.setLayout(layout)
     return (group, layout)
 
-def create_item_group(api:Habitipy, tasks:list, widget_registry:dict):
-    item_group = widget_registry.get('item_group', None)
-    item_group_layout = widget_registry.get('item_group_layout', None)
-    item_group_tasks = widget_registry.get('item_group_tasks', None)
+def create_item_group(api:Habitica, tasks:list, widget_registry:dict):
+    item_group = widget_registry.retrieve(WidgetRegistryName.ITEM_GROUP)
+    item_group_layout = widget_registry.retrieve(WidgetRegistryName.ITEM_GROUP_LAYOUT)
+    item_group_tasks = widget_registry.retrieve(WidgetRegistryName.ITEM_GROUP_TASKS)
 
     if item_group is None:
         item_group = QGroupBox('Tasks')
         item_group_layout = QVBoxLayout()
         item_group_tasks = []
         item_group.setLayout(item_group_layout)
-        widget_registry['item_group'] = item_group
-        widget_registry['item_group_layout'] = item_group_layout
-        widget_registry['item_group_tasks'] = item_group_tasks
+        widget_registry.store(WidgetRegistryName.ITEM_GROUP, item_group)
+        widget_registry.store(WidgetRegistryName.ITEM_GROUP_LAYOUT, item_group_layout)
+        widget_registry.store(WidgetRegistryName.ITEM_GROUP_TASKS, item_group_tasks)
     else:
         for task in item_group_tasks:
             item_group_layout.removeWidget(task)
             task.setParent(None)
-        widget_registry['item_group_tasks'].clear()
+        item_group_tasks.clear()
 
     if tasks is not None:
         for task in tasks:
             checkbox = QRadioButton(task.text)
             checkbox.toggled.connect(lambda selected: checkbox_selected_cb(api, widget_registry, selected))
-            widget_registry['item_group_tasks'].append(checkbox)
+            item_group_tasks = widget_registry.retrieve(WidgetRegistryName.ITEM_GROUP_TASKS)
+            item_group_tasks.append(checkbox)
             item_group_layout.addWidget(checkbox)
 
     return (item_group, item_group_layout)
@@ -172,7 +157,7 @@ def add_spacer(layout):
 
 
 # habitipy
-api = Habitipy(load_conf(DEFAULT_CONF))
+api = Habitica(Habitipy(load_conf(DEFAULT_CONF)))
 reload_tasks(api, tasks)
 
 # app
@@ -193,9 +178,9 @@ priority_select.addItem('Easy')
 priority_select.addItem('Medium')
 priority_select.addItem('Hard')
 
-widget_registry['task_input'] = add_input
-widget_registry['task_textarea'] = add_input_textarea
-widget_registry['task_priority'] = priority_select
+widget_registry.store(WidgetRegistryName.TASK_INPUT, add_input)
+widget_registry.store(WidgetRegistryName.TASK_TEXTAREA, add_input_textarea)
+widget_registry.store(WidgetRegistryName.TASK_PRIORITY, priority_select)
 
 add_task_group_layout.addWidget(add_input)
 add_task_group_layout.addWidget(add_input_textarea)
@@ -210,8 +195,8 @@ input_action_group, input_action_group_layout = create_input_action_group(api, w
 
 # items
 item_group, item_group_layout = create_item_group(api, tasks, widget_registry)
-widget_registry['item_group'] = item_group
-widget_registry['item_group_layout'] = item_group_layout
+widget_registry.store(WidgetRegistryName.ITEM_GROUP, item_group)
+widget_registry.store(WidgetRegistryName.ITEM_GROUP_LAYOUT, item_group_layout)
 
 # layout
 layout.addWidget(title)
