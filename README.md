@@ -15,5 +15,5 @@ show_style = wide
 ```
 
 ## Running
-1.  Install deps - `python -r ./requirements.txt`
+1.  Install deps - `pip -r ./requirements.txt`
 2.  Running app - `python ./app.py`
