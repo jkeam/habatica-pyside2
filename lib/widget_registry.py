@@ -7,6 +7,7 @@ class WidgetRegistryName(Enum):
     TASK_PRIORITY = 'task_priority'
     ITEM_GROUP = 'item_group'
     ITEM_GROUP_LAYOUT = 'item_group_layout'
+    SAVE_BUTTON = 'save_button'
 
 class WidgetRegistry:
     def __init__(self):

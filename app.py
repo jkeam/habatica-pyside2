@@ -1,3 +1,4 @@
+import sys
 from PySide2.QtWidgets import *
 from habitipy import Habitipy, load_conf, DEFAULT_CONF
 from lib.task import TaskType, Task, Priority
@@ -34,6 +35,7 @@ def find_selected_task(widget_registry:dict, tasks:list):
                 return task
     return None
 
+# Add new task
 def add_button_cb(api:Habitica, tasks:list, widget_registry:dict, text:str, textarea:str, priority:int):
     task_id = find_selected_task_id(widget_registry, tasks)
     api.save(task_id, text, textarea, priority)
@@ -45,7 +47,8 @@ def save_button_cb(api:Habitipy, widget_registry:dict, tasks:list):
     api.mark_completed(task_id)
     clear_button_cb(api, widget_registry)
 
-def edit_button_cb(api:Habitipy, widget_registry: dict, tasks:list):
+# View the selected task
+def view_selected_task(api:Habitipy, widget_registry: dict, tasks:list):
     task = find_selected_task(widget_registry, tasks)
     if task is None:
         print('no selected task found for edit') 
@@ -58,6 +61,7 @@ def edit_button_cb(api:Habitipy, widget_registry: dict, tasks:list):
     task_input.setText(task.text)
     task_input_textarea.setText(task.notes)
     priority_select.setCurrentIndex(Priority.priority_value_to_index(task.priority))
+    widget_registry.retrieve(WidgetRegistryName.SAVE_BUTTON).setText('Update')
 
 # Delete selected tasks
 def delete_button_cb(api:Habitica, widget_registry:dict, tasks:list):
@@ -68,16 +72,20 @@ def delete_button_cb(api:Habitica, widget_registry:dict, tasks:list):
     api.destroy(task_id)
     clear_button_cb(api, widget_registry)
 
+# Fired when checkbox/radio is selected
 def checkbox_selected_cb(api:Habitica, widget_registry:dict, tasks:list, selected:bool):
     if selected is False:
+        clear_button_cb(api, widget_registry)
         return
-    edit_button_cb(api, widget_registry, tasks)
+    view_selected_task(api, widget_registry, tasks)
 
+# Clear all inputs
 def clear_button_cb(api:Habitica, widget_registry:dict):
     task_input = widget_registry.retrieve(WidgetRegistryName.TASK_INPUT)
     task_input.clear()
     widget_registry.retrieve(WidgetRegistryName.TASK_TEXTAREA).clear()
     widget_registry.retrieve(WidgetRegistryName.TASK_PRIORITY).setCurrentIndex(0)
+    widget_registry.retrieve(WidgetRegistryName.SAVE_BUTTON).setText('Add')
     reload_tasks(api, tasks)
     create_item_group(api, tasks, widget_registry)
     task_input.setFocus()
@@ -99,13 +107,18 @@ def create_action_group(api:Habitica, widget_registry:dict, tasks:list):
     group.setLayout(layout)
     return (group, layout)
 
-def create_input_action_group(api:Habitica, widget_registry:dict, tasks:list, add_input, add_input_textarea, priority_select):
+def create_input_action_group(api:Habitica, widget_registry:dict, tasks:list):
+    add_input = widget_registry.retrieve(WidgetRegistryName.TASK_INPUT)
+    add_input_textarea = widget_registry.retrieve(WidgetRegistryName.TASK_TEXTAREA)
+    priority_select = widget_registry.retrieve(WidgetRegistryName.TASK_PRIORITY)
+
     group = QGroupBox('Input Actions')
     layout = QHBoxLayout()
 
     # add button
     add_button = QPushButton('Add')
     add_button.clicked.connect(lambda: add_button_cb(api, tasks, widget_registry, add_input.text(), add_input_textarea.toPlainText(), priority_select.currentIndex()))
+    widget_registry.store(WidgetRegistryName.SAVE_BUTTON, add_button)
 
     # clear button
     clear_button = QPushButton('Clear')
@@ -145,58 +158,59 @@ def create_item_group(api:Habitica, tasks:list, widget_registry:dict):
 
     return (item_group, item_group_layout)
 
+def create_task_action_group(api:Habitica, widget_registry: WidgetRegistry):
+    add_task_group = QGroupBox('Input')
+    add_task_group_layout = QVBoxLayout()
+    add_input = QLineEdit()
+    add_input_textarea = QTextEdit()
+    priority_select = QComboBox()
+    priority_select.addItem('Trivial')
+    priority_select.addItem('Easy')
+    priority_select.addItem('Medium')
+    priority_select.addItem('Hard')
 
-# habitipy
-api = Habitica(Habitipy(load_conf(DEFAULT_CONF)))
-reload_tasks(api, tasks)
+    widget_registry.store(WidgetRegistryName.TASK_INPUT, add_input)
+    widget_registry.store(WidgetRegistryName.TASK_TEXTAREA, add_input_textarea)
+    widget_registry.store(WidgetRegistryName.TASK_PRIORITY, priority_select)
 
-# app
-app = QApplication([])
-layout = QVBoxLayout()
+    add_task_group_layout.addWidget(add_input)
+    add_task_group_layout.addWidget(add_input_textarea)
+    add_task_group_layout.addWidget(priority_select)
+    add_task_group.setLayout(add_task_group_layout)
+    return (add_task_group, add_task_group_layout)
 
-# title
-title = QLabel('Todo List')
 
-# add
-add_task_group = QGroupBox('Input')
-add_task_group_layout = QVBoxLayout()
-add_input = QLineEdit()
-add_input_textarea = QTextEdit()
-priority_select = QComboBox()
-priority_select.addItem('Trivial')
-priority_select.addItem('Easy')
-priority_select.addItem('Medium')
-priority_select.addItem('Hard')
+try:
+    # habitipy
+    app = QApplication([])
+    api = Habitica(Habitipy(load_conf(DEFAULT_CONF)))
+    reload_tasks(api, tasks)
 
-widget_registry.store(WidgetRegistryName.TASK_INPUT, add_input)
-widget_registry.store(WidgetRegistryName.TASK_TEXTAREA, add_input_textarea)
-widget_registry.store(WidgetRegistryName.TASK_PRIORITY, priority_select)
+    # components
+    title = QLabel('Todo List')
+    add_task_group, add_task_group_layout = create_task_action_group(api, widget_registry)
+    input_action_group, input_action_group_layout = create_input_action_group(api, widget_registry, tasks)
+    action_group, action_group_layout = create_action_group(api, widget_registry, tasks)
 
-add_task_group_layout.addWidget(add_input)
-add_task_group_layout.addWidget(add_input_textarea)
-add_task_group_layout.addWidget(priority_select)
-add_task_group.setLayout(add_task_group_layout)
+    # items
+    item_group, item_group_layout = create_item_group(api, tasks, widget_registry)
+    widget_registry.store(WidgetRegistryName.ITEM_GROUP, item_group)
+    widget_registry.store(WidgetRegistryName.ITEM_GROUP_LAYOUT, item_group_layout)
 
-# action group
-action_group, action_group_layout = create_action_group(api, widget_registry, tasks)
+    # app and layout
+    layout = QGridLayout()
+    layout.addWidget(title, 0, 0)
 
-# input action group
-input_action_group, input_action_group_layout = create_input_action_group(api, widget_registry, tasks, add_input, add_input_textarea, priority_select)
+    layout.addWidget(item_group, 1, 0)
+    layout.addWidget(action_group, 2, 0)
 
-# items
-item_group, item_group_layout = create_item_group(api, tasks, widget_registry)
-widget_registry.store(WidgetRegistryName.ITEM_GROUP, item_group)
-widget_registry.store(WidgetRegistryName.ITEM_GROUP_LAYOUT, item_group_layout)
+    layout.addWidget(add_task_group, 1, 1)
+    layout.addWidget(input_action_group, 2, 1)
 
-# layout
-layout.addWidget(title)
-layout.addWidget(add_task_group)
-layout.addWidget(input_action_group)
-layout.addWidget(item_group)
-layout.addWidget(action_group)
-
-window = QWidget()
-window.setLayout(layout)
-# window.resize(600, 600)
-window.show()
-app.exec_()
+    window = QWidget()
+    window.setLayout(layout)
+    # window.resize(600, 600)
+    window.show()
+    app.exec_()
+except:
+    print(f'Unexpected error: sys.exc_info()[0]')
