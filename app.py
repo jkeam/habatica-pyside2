@@ -213,4 +213,4 @@ try:
     window.show()
     app.exec_()
 except:
-    print(f'Unexpected error: sys.exc_info()[0]')
+    print(f'Unexpected error: {sys.exc_info()[0]}')
