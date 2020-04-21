@@ -8,7 +8,6 @@ class Layout:
       layout.addSpacerItem(vertical_spacer)
       return layout
 
-
 # Signals:
 # message.returnPressed.connect(send_message)
 # timer = QTimer()
