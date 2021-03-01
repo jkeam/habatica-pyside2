@@ -1,9 +1,14 @@
 import sys
 from PySide2.QtWidgets import *
+from PySide2.QtGui import QIcon
 from habitipy import Habitipy, load_conf, DEFAULT_CONF
 from lib.task import TaskType, Task, Priority
 from lib.widget_registry import WidgetRegistry, WidgetRegistryName
 from lib.habitica import Habitica
+from dotenv import load_dotenv
+from os import getenv
+from platform import system
+load_dotenv()
 
 # global vars
 tasks = []
@@ -51,7 +56,7 @@ def save_button_cb(api:Habitipy, widget_registry:dict, tasks:list):
 def view_selected_task(api:Habitipy, widget_registry: dict, tasks:list):
     task = find_selected_task(widget_registry, tasks)
     if task is None:
-        print('no selected task found for edit') 
+        print('no selected task found for edit')
         return
 
     # set values in inputs
@@ -179,11 +184,22 @@ def create_task_action_group(api:Habitica, widget_registry: WidgetRegistry):
     add_task_group.setLayout(add_task_group_layout)
     return (add_task_group, add_task_group_layout)
 
+def create_api():
+    if system().lower() != 'windows':
+        return Habitica(Habitipy(load_conf(DEFAULT_CONF)))
+
+    config = {}
+    config['url'] = getenv('URL', 'https://habitica.com')
+    config['show_numbers'] = getenv('SHOW_NUMBERS', 'y')
+    config['show_style'] = getenv('SHOW_STYLE', 'wide')
+    config['login'] = getenv('LOGIN')
+    config['password'] = getenv('PASSWORD')
+    return Habitica(Habitipy(config))
 
 try:
     # habitipy
     app = QApplication([])
-    api = Habitica(Habitipy(load_conf(DEFAULT_CONF)))
+    api = create_api()
     reload_tasks(api, tasks)
 
     # components
@@ -210,6 +226,8 @@ try:
     window = QWidget()
     window.setLayout(layout)
     # window.resize(600, 600)
+    window.setWindowTitle('Habitica Todo')
+    window.setWindowIcon(QIcon('lib/habitica.png'))
     window.show()
     app.exec_()
 except:
