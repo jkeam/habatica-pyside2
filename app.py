@@ -1,5 +1,6 @@
 import sys
 from PySide2.QtWidgets import *
+from PySide2.QtGui import QIcon
 from habitipy import Habitipy, load_conf, DEFAULT_CONF
 from lib.task import TaskType, Task, Priority
 from lib.widget_registry import WidgetRegistry, WidgetRegistryName
@@ -225,6 +226,8 @@ try:
     window = QWidget()
     window.setLayout(layout)
     # window.resize(600, 600)
+    window.setWindowTitle('Habitica Todo')
+    window.setWindowIcon(QIcon('lib/habitica.png'))
     window.show()
     app.exec_()
 except:
